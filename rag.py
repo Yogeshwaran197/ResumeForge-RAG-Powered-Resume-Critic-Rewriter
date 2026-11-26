@@ -33,6 +33,28 @@ def  pdf_loader():
     return chunks
 
 
+def retriever():
+
+    chunks = pdf_loader()
+
+    persist_memory = r"C:\Users\JANARTHAN\ResumeForge\ResumeForge-RAG-Powered-Resume-Critic-Rewriter"
+    collection_name = "SelfDB"
+
+    embedding = HuggingFaceEmbeddings(
+        model_name ="BAAI/bge-m3"
+    )
+    try:
+        vectorstore = Chroma.from_documents(
+            documents=chunks,
+            persist_directory=persist_memory,
+            collection_name=collection_name,
+            embedding= embedding
+        )
+    except Exception as error:
+        print("Error while creating vectorstore")
+
+    
+    return vectorstore
 
     
 
