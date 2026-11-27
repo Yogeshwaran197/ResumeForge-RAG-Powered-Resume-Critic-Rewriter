@@ -1,3 +1,4 @@
+from aiohttp import client_middleware_digest_auth
 import pathlib  
 import os
 from dotenv import load_dotenv
@@ -28,6 +29,7 @@ def  pdf_loader():
 
     try:
          doc = loader.load()
+         resume_text = "\n".join(d.page_content for d in doc )
          print(f"Length of the document : {len(doc)}")
 
          splitter = RecursiveCharacterTextSplitter(
@@ -39,7 +41,7 @@ def  pdf_loader():
         print(f"Error while loading resume: {e}")
         raise 
 
-    return chunks
+    return resume_text, chunks
 
 
 def get_vectorstore(chunks):
@@ -66,7 +68,7 @@ def get_vectorstore(chunks):
 
 def hybrid_search():
 
-    chunks = pdf_loader()
+    resume_text, chunks = pdf_loader()
     vectorstore = get_vectorstore(chunks)
 
     vector_search = vectorstore.as_retriever(
@@ -99,7 +101,7 @@ def hybrid_search():
         base_retriever=ensemble_retriever
     )
 
-    return retriever
+    return retriever, resume_text
 
 
 
