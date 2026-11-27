@@ -8,3 +8,5 @@ chromadb
 langchain-huggingface
 sentence-transformers
 python-dotenv
+langchain_cohere
+langchain_classic
