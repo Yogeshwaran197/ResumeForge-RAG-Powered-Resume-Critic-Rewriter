@@ -10,3 +10,6 @@ sentence-transformers
 python-dotenv
 langchain_cohere
 langchain_classic
+pypdf
+rank_bm25
+sentence-transformers

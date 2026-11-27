@@ -1,9 +1,8 @@
-from torch import embedding
 import pathlib  
 import os
 from dotenv import load_dotenv
 from langchain_community.vectorstores import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
@@ -20,34 +19,33 @@ if not COHERE_API_KEY:
 
 def  pdf_loader():
 
-    path = input("Paste the path of your pdf : ")
+    path = input("Paste the path of your pdf : ").strip().strip('"')
 
-    if not os.exists(path):
+    if not os.path.exists(path):
         raise ValueError("File path is invalid")
 
-    loader = PyPDFLoader()
+    loader = PyPDFLoader(path)
 
     try:
-         doc = loader.load(path)
-         print("Length of the document")
+         doc = loader.load()
+         print(f"Length of the document : {len(doc)}")
 
          splitter = RecursiveCharacterTextSplitter(
             chunk_size = 300,
             chunk_overlap = 100
          )
-         chunks = splitter.split_text(doc)
-    except Exception as error:
-        print("Error while loading loading Resume")
+         chunks = splitter.split_documents(doc)
+    except Exception as e:
+        print(f"Error while loading resume: {e}")
+        raise 
 
     return chunks
 
 
-def retriever():
-
-    chunks = pdf_loader()
+def get_vectorstore(chunks):
 
     persist_memory = r"C:\Users\JANARTHAN\ResumeForge\ResumeForge-RAG-Powered-Resume-Critic-Rewriter"
-    collection_name = "SelfDB"
+    collection_name = "chroma_db"
 
     embedding = HuggingFaceEmbeddings(
         model_name ="BAAI/bge-m3"
@@ -60,16 +58,18 @@ def retriever():
             embedding= embedding
         )
     except Exception as error:
-        print("Error while creating vectorstore")
+        print("Error while creating vectorstore {error}")
+        raise
 
     return vectorstore
 
 
 def hybrid_search():
 
-    vectorstore = retriever()
+    chunks = pdf_loader()
+    vectorstore = get_vectorstore(chunks)
 
-    vector_search = vectorstore.as_reteriever(
+    vector_search = vectorstore.as_retriever(
         search_type = "mmr",
         search_kwargs = {
             "k" : 5,
@@ -79,7 +79,7 @@ def hybrid_search():
     )
 
     bm25_search = BM25Retriever.from_documents(
-        documents = pdf_loader(),
+        documents = chunks,
         k = 5
     )
 
@@ -100,6 +100,8 @@ def hybrid_search():
     )
 
     return retriever
+
+
 
 
 
