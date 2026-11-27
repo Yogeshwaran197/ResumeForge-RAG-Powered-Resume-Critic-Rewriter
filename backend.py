@@ -18,3 +18,34 @@ from rag import hybrid_search
 load_dotenv()
 
 
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+if not GROQ_API_KEY:
+    raise ValueError("INVALID API KEY")
+
+llm = ChatGroq(
+    model = "openai/gpt-oss-120b",
+    api_key=GROQ_API_KEY
+)
+
+from typing import TypedDict
+from pydantic import BaseModel, Field
+
+
+class CriticResult(BaseModel):
+    approved: bool
+    weaknesses: list[str]
+
+
+class QueryList(BaseModel):
+    queries: list[str] = Field(description="3 to 5 short search queries")
+
+
+class AgentState(TypedDict, total=False):
+    resume_text: str         
+    current_resume: str    
+    search_queries: list[str]
+    guidelines: str           
+    weaknesses: list[str]     
+    approved: bool          
+    retry_count: int         
+    final_note: str
