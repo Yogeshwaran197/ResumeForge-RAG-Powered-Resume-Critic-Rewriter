@@ -128,7 +128,7 @@ def query_generator(state : AgentState) -> AgentState:
     return
 
 
-def retriever(state : AgentState) -> AgentState:
+def retriever(state : AgentState) -> dict:
 
     queries = state["search_queries"]
     seen, rules = set(), []
@@ -144,6 +144,52 @@ def retriever(state : AgentState) -> AgentState:
     return {
         state["guidelines"] :  guidelines
     }
+
+
+critic_llm =  llm.with_structured_output(CriticResult)
+
+def critic_node(state : AgentState) -> Dict
+
+    resume =  state["current_resume"]
+    guidelines = state['guidelines']
+
+    SYSTEM = """You are a strict resume reviewer.
+        Check the resume against the rules. List each weakness and name the rule it breaks.
+        Approve only if no rule is broken. Do not invent problems the rules don't cover.
+
+        Rules:
+        {guidelines}
+
+        Resume:
+        {resume}
+    """
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", SYSTEM)
+        ("user", "here's \n resume : {resume} \n  guidelines : {guidelines}")
+    ])
+
+    chain = prompt | critic_llm 
+
+    response = chain.invoke({
+        "resume" : resume,
+        "guidelines" : guidelines
+    })
+
+    approval = response.approved
+    weaknesses= response.weaknesses
+
+    return {
+        state["approved"] : approval,
+        state["weaknesses"] : weaknesses
+    }
+
+
+
+
+
+
+
 
 
 
