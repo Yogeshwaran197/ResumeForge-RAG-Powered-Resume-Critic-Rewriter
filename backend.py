@@ -1,18 +1,14 @@
-from huggingface_hub.inference._mcp.types import AgentConfig
 import os
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage , SystemMessage
 from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
-from langgraph.types import interrupt, Command
 from langgraph.checkpoint.postgres  import PostgresSaver
+import psycopg
 from psycopg import connect
-from psycopg.rows import RowFactory
-from typing import TypedDict, List, Dict, Sequence, Annotated
+from psycopg.rows import dict_row
+from typing import TypedDict, Dict
 from pydantic import BaseModel, Field
 from rag import hybrid_search
 from rag import resmu
@@ -23,6 +19,10 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not GROQ_API_KEY:
     raise ValueError("INVALID API KEY")
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("Invalid database url")
 
 llm = ChatGroq(
     model = "openai/gpt-oss-120b",
@@ -97,7 +97,7 @@ def guardrails_should_continue(state : AgentState):
     guardrail = state['guardrail']
 
     if guardrail == True:
-        return "retriever"
+        return "query_generator"
     else :
         return "end"
 
@@ -239,7 +239,7 @@ def rewrite(state : AgentState) -> Dict:
     "retry_count": state.get("retry_count", 0) + 1,
 }
 
-def should_continue(state : AgentState):
+def should_continue_rewrite(state : AgentState):
 
     retry_count = state["retry_count"]
 
@@ -248,6 +248,62 @@ def should_continue(state : AgentState):
     if state["retry_count"] < 2:
         return "critic"
     return "end"
+
+
+graph = StateGraph(AgentState)
+
+#nodes
+graph.add_node("guardrail", guardrail)
+graph.add_node("query_generator", query_generator)
+graph.add_node("retriever", retriever)
+graph.add_node("critic", critic_node)
+graph.add_node("rewrite", rewrite)
+
+
+#edges
+graph.add_edge(START, "guardrail")
+
+graph.add_conditional_edges(
+    "guardrail",
+    guardrails_should_continue,
+    {
+        "query_generator" : "query_generator",
+        "end" : END
+
+    }
+)
+
+graph.add_edge("query_generator", "retriever")
+graph.add_edge("retriever", "critic")
+graph.add_edge("critic", "rewrite")
+
+graph.add_conditional_edges(
+    "rewrite",
+    should_continue_rewrite,
+    {
+        "end" : END,
+        "critic" : "critic"
+    }
+)
+
+conn = psycopg.connect(
+    DATABASE_URL,
+    row_factory=dict_row,
+    autocommit=True
+)
+
+checkpointer = PostgresSaver(conn)
+checkpointer.setup()
+
+agent = graph.compile(
+    checkpointer = checkpointer
+)
+
+
+
+
+
+
 
 
 
