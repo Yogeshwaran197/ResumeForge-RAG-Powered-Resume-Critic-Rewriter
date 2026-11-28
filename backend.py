@@ -33,7 +33,6 @@ retriever, resume_text = hybrid_search()
 
 
 class CriticResult(BaseModel):
-    approved: bool
     weaknesses: list[str]
 
 
@@ -176,13 +175,14 @@ def critic_node(state : AgentState) -> Dict
         "guidelines" : guidelines
     })
 
-    approval = response.approved
     weaknesses= response.weaknesses
 
     return {
-        state["approved"] : approval,
         state["weaknesses"] : weaknesses
     }
+
+
+
 
 
 
