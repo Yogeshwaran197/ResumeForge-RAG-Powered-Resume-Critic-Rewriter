@@ -75,10 +75,10 @@ def guardrail(state : AgentState) -> Dict:
 
     """
 
-    guardrail_prompt = ChatPromptTemplate.from_messages(
+    guardrail_prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM),
         ("user", "here's resume{resume}")
-    )
+    ])
 
     chain = guardrail_prompt | guardrail_llm 
 
@@ -99,6 +99,38 @@ def guardrails_should_continue(state : AgentState):
         return "retriever"
     else :
         return "end"
+
+
+def query_generator(state : AgentState) -> Dict:
+
+    SYSTEM = """Read this resume and write 3 to 5 short search queries to find resume-writing rules that apply to it.
+    One weakness area per query (e.g. vague bullets, missing metrics, skills section).
+    Do not copy resume text into the queries.
+
+    Resume:
+    {resume}"""
+
+    query_prompt = ChatPromptTemplate.from_messages([
+        ("system", SYSTEM),
+        ("user", "here's user resume {resume}")
+    ])
+
+    chain = query_prompt | llm | StrOutputParser
+
+    response = chain.invoke({
+        "resume" : resume_text
+    })
+
+    state["search_queries"] = response
+    state["resume_text"] = resume_text
+
+    return
+
+    
+
+
+
+
     
 
 
