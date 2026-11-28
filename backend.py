@@ -45,10 +45,12 @@ class AgentState(TypedDict, total=False):
     current_resume: str    
     search_queries: list[str]
     guidelines: str           
-    weaknesses: list[str]     
-    approved: bool          
+    weaknesses: list[str]    
+    rewrite_feedback : str
+    rewrite_ok :  bool        
     retry_count: int         
     guardrail: bool
+
 
 
 class GuardrailResult(BaseModel):
@@ -148,29 +150,34 @@ critic_llm =  llm.with_structured_output(CriticResult)
 
 def critic_node(state : AgentState) -> Dict:
 
-    resume =  state["current_resume"]
+    resume =  state['current_resume']
     guidelines = state['guidelines']
+    feedback = state['feedback']
 
-    SYSTEM = """You are a strict resume reviewer.
-        Check the resume against the rules. List each weakness and name the rule it breaks.
-        Approve only if no rule is broken. Do not invent problems the rules don't cover.
+    CRITIC_PROMPT = """You are a strict resume reviewer.
+    Check the resume against the rules. List each weakness and name the rule it breaks.
+    Approve only if no rule is broken. Do not invent problems the rules don't cover.
+    If there are notes from the last rewrite, check whether those issues are really fixed.
 
-        Rules:
-        {guidelines}
+    Rules:
+    {guidelines}
 
-        Resume:
-        {resume}
-    """
+    Notes from last rewrite:
+    {feedback}
+
+    Resume:
+    {resume}"""
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM)
-        ("user", "here's \n resume : {resume} \n  guidelines : {guidelines}")
+        ("system", CRITIC_PROMPT)
+        ("user", "here's \n resume : {resume} \n feedback : {feedback} \n guidelines : {guidelines}")
     ])
 
     chain = prompt | critic_llm 
 
     response = chain.invoke({
         "resume" : resume,
+        "feedback" : feedback,
         "guidelines" : guidelines
     })
 
@@ -181,11 +188,12 @@ def critic_node(state : AgentState) -> Dict:
     }
 
 
-class Rewrite(BaseModel):
-    current_resume: str 
-    approved: bool  
-    
-rewrite_llm =  llm.with_structured_output(Rewrite)
+class RewriteResult(BaseModel):
+    resume: str
+    is_good_enough: bool
+    feedback: str = Field(description="What was changed, and what is still weak")
+
+rewrite_llm =  llm.with_structured_output(RewriteResult)
 
 def rewrite(state : AgentState) -> Dict:
 
@@ -195,7 +203,11 @@ def rewrite(state : AgentState) -> Dict:
 
     REWRITE_PROMPT = """Rewrite the resume to fix the weaknesses below, following the rules.
     Never invent facts, tools or numbers. If a metric is missing, write [add metric].
-    Keep the same sections and layout. Return only the improved resume.
+    Keep the same sections and layout.
+
+    Then set:
+    - is_good_enough: true only if every weakness is fixed and no rule is still broken
+    - feedback: 2-3 short lines for the next reviewer: what you changed, and anything still weak
 
     Weaknesses:
     {weaknesses}
@@ -204,8 +216,8 @@ def rewrite(state : AgentState) -> Dict:
     {guidelines}
 
     Resume:
-    {resume}
-    """
+    {resume}"""
+    
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", REWRITE_PROMPT)
@@ -214,19 +226,29 @@ def rewrite(state : AgentState) -> Dict:
 
     chain =  prompt | rewrite_llm
 
-    response = chain.invoke({
+    result = chain.invoke({
         "weaknesses" : {weaknesses},
         "resume" : {resume},
         "guidelines" : {guidelines} 
     })
 
-    approved = response.approved
-    current_resume = response.current_resume
-
     return {
-        state["approved"] : approved,
-        state["current_resume"] : current_resume
-    }
+    "current_resume": result.resume,
+    "rewrite_ok": result.is_good_enough,
+    "rewrite_feedback": result.feedback,
+    "retry_count": state.get("retry_count", 0) + 1,
+}
+
+def should_continue(state : AgentState):
+
+    retry_count = state["retry_count"]
+
+    if retry_count:
+        return "end"
+    if state["retry_count"] < 2:
+        return "critic"
+    return "end"
+
 
 
 
