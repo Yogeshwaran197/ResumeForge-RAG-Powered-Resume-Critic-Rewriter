@@ -1,3 +1,4 @@
+from huggingface_hub.inference._mcp.types import AgentConfig
 import os
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
@@ -101,7 +102,7 @@ def guardrails_should_continue(state : AgentState):
         return "end"
 
 
-def query_generator(state : AgentState) -> Dict:
+def query_generator(state : AgentState) -> AgentState:
 
     SYSTEM = """Read this resume and write 3 to 5 short search queries to find resume-writing rules that apply to it.
     One weakness area per query (e.g. vague bullets, missing metrics, skills section).
@@ -126,7 +127,28 @@ def query_generator(state : AgentState) -> Dict:
 
     return
 
+
+def retriever(state : AgentState) -> AgentState:
+
+    queries = state["search_queries"]
+    seen, rules = set(), []
+
+    for q in queries:
+        for doc in retriever.invoke(q):
+            if  doc.page_content  not in seen:
+                seen.add(doc.page_content)
+                rules.append(doc.page_content)
     
+    guidelines = "\n\n".join(rules)
+
+    return {
+        state["guidelines"] :  guidelines
+    }
+
+
+
+
+
 
 
 
